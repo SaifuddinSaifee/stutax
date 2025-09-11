@@ -70,10 +70,10 @@ const formSchema = z.object({
     .toUpperCase(),
 
   // Status Information
-  status: z.enum(["student", "professional"], {
-    message: "Please select your status",
+  isUSResident: z.enum(["yes", "no"], {
+    message: "Please select your US residency status",
   }),
-  studentType: z.enum(["resident", "international"]).optional(),
+  status: z.enum(["student", "professional"]).optional(),
   universityName: z
     .string()
     .min(2, "University name must be at least 2 characters")
@@ -102,8 +102,8 @@ export default function ProfilePage() {
       state: "",
       zip: "",
       residencyState: "",
+      isUSResident: undefined,
       status: undefined,
-      studentType: undefined,
       universityName: "",
       employmentType: undefined,
       companyName: "",
@@ -321,24 +321,22 @@ export default function ProfilePage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="status"
+                    name="isUSResident"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Status</FormLabel>
+                        <FormLabel>Are you a US Resident?</FormLabel>
                         <Select
                           onValueChange={field.onChange}
                           defaultValue={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select your status" />
+                              <SelectValue placeholder="Select your residency status" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="student">Student</SelectItem>
-                            <SelectItem value="professional">
-                              Professional
-                            </SelectItem>
+                            <SelectItem value="yes">Yes</SelectItem>
+                            <SelectItem value="no">No</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -346,36 +344,37 @@ export default function ProfilePage() {
                     )}
                   />
 
+                  {form.watch("isUSResident") && (
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status</FormLabel>
+                          <Select
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select your status" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="student">Student</SelectItem>
+                              <SelectItem value="professional">
+                                Professional
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
                   {form.watch("status") === "student" && (
                     <>
-                      <FormField
-                        control={form.control}
-                        name="studentType"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Student Type</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select student type" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="resident">
-                                  Resident
-                                </SelectItem>
-                                <SelectItem value="international">
-                                  International
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                       <FormField
                         control={form.control}
                         name="universityName"
