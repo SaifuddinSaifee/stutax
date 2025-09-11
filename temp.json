@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/irs/form-8843.schema.json",
+  "title": "IRS Form 8843 — Statement for Exempt Individuals and Individuals With a Medical Condition",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tax_year": {
+      "type": "integer",
+      "minimum": 1990,
+      "description": "Four-digit year printed on the form, e.g., 2024"
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "first": {
+              "type": "string",
+              "minLength": 1
+            },
+            "middle": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last": {
+              "type": "string",
+              "minLength": 1
+            },
+            "suffix": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "first",
+            "last"
+          ]
+        },
+        "tin": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "SSN or ITIN if available",
+          "pattern": "^[0-9]{3}-?[0-9]{2}-?[0-9]{4}$"
+        },
+        "address_country_of_residence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "address_line1": {
+              "type": "string"
+            },
+            "address_line2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "city": {
+              "type": "string"
+            },
+            "province_state_region": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "postal_code": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "country": {
+              "type": "string",
+              "minLength": 2
+            }
+          },
+          "required": [
+            "address_line1",
+            "city",
+            "country"
+          ]
+        },
+        "us_address": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "address_line1": {
+              "type": "string"
+            },
+            "address_line2": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "city": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 2
+            },
+            "zip": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "address_line1",
+            "city",
+            "state",
+            "zip"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "address_country_of_residence"
+      ]
+    },
+    "part_i_general_information": {
+      "type": "object",
+      "title": "Part I — General Information (All Filers)",
+      "additionalProperties": false,
+      "properties": {
+        "visa_type": {
+          "type": "string",
+          "description": "Type of visa held during the tax year",
+          "enum": [
+            "F",
+            "J",
+            "M",
+            "Q",
+            "Other"
+          ]
+        },
+        "visa_type_other_text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Required if visa_type is 'Other'"
+        },
+        "current_nonimmigrant_status": {
+          "type": "string"
+        },
+        "date_first_entered_us": {
+          "type": "string",
+          "format": "date",
+          "description": "Date you entered (first entry relevant to this status)"
+        },
+        "days_present_current_year": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "days_present_prev_year_1": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "days_present_prev_year_2": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "visa_type",
+        "current_nonimmigrant_status",
+        "date_first_entered_us",
+        "days_present_current_year",
+        "days_present_prev_year_1",
+        "days_present_prev_year_2"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "visa_type": {
+                "const": "Other"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "visa_type_other_text"
+            ]
+          }
+        }
+      ]
+    },
+    "part_ii_teachers_trainees": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "title": "Part II — Teachers and Trainees (J or Q)",
+      "additionalProperties": false,
+      "properties": {
+        "is_applicable": {
+          "type": "boolean",
+          "const": true
+        },
+        "institution_or_organization": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "director_or_sponsor_contact": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "address": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "phone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "presence_history_last_6_years": {
+          "type": "array",
+          "description": "Dates present in the U.S. as teacher/trainee during last 6 years",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        }
+      },
+      "required": [
+        "is_applicable",
+        "institution_or_organization"
+      ]
+    },
+    "part_iii_students": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "title": "Part III — Students (F, J, M, or Q)",
+      "additionalProperties": false,
+      "properties": {
+        "is_applicable": {
+          "type": "boolean",
+          "const": true
+        },
+        "academic_institution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "presence_history_last_5_years": {
+          "type": "array",
+          "description": "Dates present in the U.S. as a student during last 5 years",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        }
+      },
+      "required": [
+        "is_applicable",
+        "academic_institution"
+      ]
+    },
+    "part_iv_professional_athletes": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "title": "Part IV — Professional Athletes (Charitable Sports Event)",
+      "additionalProperties": false,
+      "properties": {
+        "is_applicable": {
+          "type": "boolean",
+          "const": true
+        },
+        "event_name": {
+          "type": "string"
+        },
+        "event_dates": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "string",
+              "format": "date"
+            },
+            "to": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "required": [
+            "from",
+            "to"
+          ]
+        }
+      },
+      "required": [
+        "is_applicable",
+        "event_name"
+      ]
+    },
+    "part_v_medical_condition": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "title": "Part V — Individuals With a Medical Condition or Medical Problem",
+      "additionalProperties": false,
+      "properties": {
+        "is_applicable": {
+          "type": "boolean",
+          "const": true
+        },
+        "intended_departure_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "actual_departure_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "medical_condition_explanation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "physician_statement_attached": {
+          "type": "boolean",
+          "description": "True if a physician's statement/letter is attached"
+        },
+        "physician": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "address": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "signature_date": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      },
+      "required": [
+        "is_applicable",
+        "intended_departure_date",
+        "medical_condition_explanation"
+      ]
+    },
+    "signature": {
+      "type": "object",
+      "title": "Signature",
+      "additionalProperties": false,
+      "properties": {
+        "signed_by": {
+          "type": "string",
+          "description": "Individual's signature name"
+        },
+        "date_signed": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "required": [
+        "signed_by",
+        "date_signed"
+      ]
+    },
+    "attachments": {
+      "type": "array",
+      "description": "Optional list of supporting documents (e.g., physician letter)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      }
+    }
+  },
+  "required": [
+    "tax_year",
+    "header",
+    "part_i_general_information",
+    "signature"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "part_ii_teachers_trainees"
+      ]
+    },
+    {
+      "required": [
+        "part_iii_students"
+      ]
+    },
+    {
+      "required": [
+        "part_iv_professional_athletes"
+      ]
+    },
+    {
+      "required": [
+        "part_v_medical_condition"
+      ]
+    }
+  ],
+  "examples": [
+    {
+      "tax_year": 2024,
+      "header": {
+        "name": {
+          "first": "Asha",
+          "last": "Patel"
+        },
+        "tin": "912-34-5678",
+        "address_country_of_residence": {
+          "address_line1": "21 MG Road",
+          "city": "Ahmedabad",
+          "province_state_region": "GJ",
+          "postal_code": "380001",
+          "country": "IN"
+        },
+        "us_address": {
+          "address_line1": "123 College Ave",
+          "city": "Boston",
+          "state": "MA",
+          "zip": "02139"
+        }
+      },
+      "part_i_general_information": {
+        "visa_type": "F",
+        "current_nonimmigrant_status": "F-1 Student",
+        "date_first_entered_us": "2023-08-15",
+        "days_present_current_year": 180,
+        "days_present_prev_year_1": 120,
+        "days_present_prev_year_2": 0
+      },
+      "part_iii_students": {
+        "is_applicable": true,
+        "academic_institution": {
+          "name": "Tech University",
+          "address": "1 University Way, Boston, MA",
+          "phone": "+1-617-555-0100"
+        },
+        "presence_history_last_5_years": [
+          {
+            "from": "2023-08-15",
+            "to": "2023-12-20"
+          },
+          {
+            "from": "2024-01-10",
+            "to": "2024-05-15"
+          }
+        ]
+      },
+      "signature": {
+        "signed_by": "Asha Patel",
+        "date_signed": "2025-02-10"
+      }
+    }
+  ]
+}
