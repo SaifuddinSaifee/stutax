@@ -1,5 +1,8 @@
 export interface PersonalInfo {
-  name: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  suffix?: string;
   ssnTin: string;
   dateOfBirth: Date;
   phone: string;

@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import type { FieldErrors } from "react-hook-form";
 import * as z from "zod";
 import { format } from "date-fns";
 import { CalendarIcon } from "@radix-ui/react-icons";
@@ -37,10 +38,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
+import { useApi } from "@/hooks/use-session";
+import { toast } from "sonner";
 
 const formSchema = z.object({
-  // Personal Information
-  name: z.string().min(2, "Name must be at least 2 characters"),
+  // Personal Information (mandatory)
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  middleName: z.union([z.string().min(1, "Middle name must be at least 1 character"), z.literal("")]).optional(),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  suffix: z.union([z.string().min(1, "Suffix must be at least 1 character"), z.literal("")]).optional(),
   ssnTin: z
     .string()
     .regex(
@@ -57,43 +64,33 @@ const formSchema = z.object({
       "Please enter a valid phone number"
     ),
   email: z.string().email("Please enter a valid email address"),
-  address: z.string().min(5, "Please enter a valid street address"),
-  city: z.string().min(2, "Please enter a valid city"),
-  state: z
-    .string()
-    .length(2, "Please enter a valid 2-letter state code")
-    .toUpperCase(),
-  zip: z.string().regex(/^\d{5}(-\d{4})?$/, "Please enter a valid ZIP code"),
-  residencyState: z
-    .string()
-    .length(2, "Please enter a valid 2-letter state code")
-    .toUpperCase(),
 
-  // Status Information
-  isUSResident: z.enum(["yes", "no"], {
-    message: "Please select your US residency status",
-  }),
+  // Address Information (not mandatory)
+  address: z.union([z.string().min(5, "Please enter a valid street address"), z.literal("")]),
+  city: z.union([z.string().min(2, "Please enter a valid city"), z.literal("")]),
+  state: z.union([z.string().length(2, "Please enter a valid 2-letter state code").toUpperCase(), z.literal("")]),
+  zip: z.union([z.string().regex(/^\d{5}(-\d{4})?$/, "Please enter a valid ZIP code"), z.literal("")]),
+  residencyState: z.union([z.string().length(2, "Please enter a valid 2-letter state code").toUpperCase(), z.literal("")]),
+
+  // Status Information (not mandatory)
+  isUSResident: z.enum(["yes", "no"]).optional(),
   status: z.enum(["student", "professional"]).optional(),
-  universityName: z
-    .string()
-    .min(2, "University name must be at least 2 characters")
-    .optional(),
+  universityName: z.union([z.string().min(2, "University name must be at least 2 characters"), z.literal("")]).optional(),
   employmentType: z.enum(["employed", "freelancer"]).optional(),
-  companyName: z
-    .string()
-    .min(2, "Company name must be at least 2 characters")
-    .optional(),
-  freelanceYears: z
-    .string()
-    .regex(/^\d+$/, "Please enter a valid number")
-    .optional(),
+  companyName: z.union([z.string().min(2, "Company name must be at least 2 characters"), z.literal("")]).optional(),
+  freelanceYears: z.union([z.string().regex(/^\d+$/, "Please enter a valid number"), z.literal("")]).optional(),
 });
 
 export default function ProfilePage() {
+  const api = useApi();
+  const [userId, setUserId] = useState<string | null>(null);
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: "",
+      firstName: "",
+      middleName: "",
+      lastName: "",
+      suffix: "",
       ssnTin: "",
       phone: "",
       email: "",
@@ -111,13 +108,77 @@ export default function ProfilePage() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
-    // Handle form submission here
+  useEffect(() => {
+    let isActive = true;
+    (async () => {
+      try {
+        const res = await api('/api/users');
+        if (!res.ok) return;
+        const user = await res.json();
+        if (!isActive || !user) return;
+        if (user._id) setUserId(user._id as string);
+        const mapped = mapUserToFormDefaults(user);
+        form.reset(mapped);
+      } catch {}
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [api, form]);
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    const payload = mapFormToUserUpdates(values);
+    try {
+      const url = userId ? `/api/users?id=${encodeURIComponent(userId)}` : '/api/users';
+      const method = userId ? 'PUT' : 'POST';
+      const res = await api(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? 'Failed to save');
+      }
+      toast.success('Profile saved successfully');
+    } catch (e) {
+      console.error(e);
+      const message = e instanceof Error ? e.message : 'Failed to save';
+      toast.error(message);
+    }
+  }
+
+  function onInvalid(errors: FieldErrors<z.infer<typeof formSchema>>) {
+    const LABELS: Record<string, string> = {
+      firstName: 'First Name',
+      middleName: 'Middle Name',
+      lastName: 'Last Name',
+      suffix: 'Suffix',
+      ssnTin: 'SSN / TIN',
+      dateOfBirth: 'Date of Birth',
+      phone: 'Phone',
+      email: 'Email',
+      address: 'Street Address',
+      city: 'City',
+      state: 'State',
+      zip: 'ZIP',
+      residencyState: 'Residency State',
+      isUSResident: 'US Residency',
+      status: 'Status',
+      universityName: 'University Name',
+      employmentType: 'Employment Type',
+      companyName: 'Company Name',
+      freelanceYears: 'Years of Freelancing',
+    };
+    const keys = Object.keys(errors ?? {});
+    if (keys.length > 0) {
+      const fields = keys.map((k) => LABELS[k] ?? k).join(', ');
+      toast.error(`Please fix ${keys.length} field${keys.length > 1 ? 's' : ''}: ${fields}.`);
+    }
   }
 
   return (
-    <div className="container mx-auto py-10">
+    <div className="container mx-auto p-8">
       <Card>
         <CardHeader>
           <CardTitle>Personal Information</CardTitle>
@@ -127,18 +188,57 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-8">
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Personal Information</h3>
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="name"
+                    name="firstName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
+                        <FormLabel>First Name</FormLabel>
                         <FormControl>
-                          <Input placeholder="John Doe" {...field} />
+                          <Input placeholder="John" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="middleName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Middle Name (optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="A." {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="lastName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Last Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Doe" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="suffix"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Suffix (optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Jr., Sr., III" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -475,4 +575,96 @@ export default function ProfilePage() {
       </Card>
     </div>
   );
+}
+
+type ApiUser = {
+  personalInfo?: {
+    // Back-compat optional single name
+    name?: string;
+    // New structured name fields
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+    suffix?: string;
+    ssnTin?: string;
+    dateOfBirth?: string | Date;
+    phone?: string;
+    email?: string;
+  };
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    residencyState?: string;
+  };
+  statusInfo?: {
+    isUSResident?: boolean;
+    status?: 'student' | 'professional';
+    studentInfo?: { universityName?: string };
+    professionalInfo?: {
+      employmentType?: 'employed' | 'freelancer';
+      companyName?: string;
+      freelanceYears?: number;
+    };
+  };
+};
+
+function mapUserToFormDefaults(user: ApiUser) {
+  return {
+    firstName: user?.personalInfo?.firstName ?? "",
+    middleName: user?.personalInfo?.middleName ?? "",
+    lastName: user?.personalInfo?.lastName ?? "",
+    suffix: user?.personalInfo?.suffix ?? "",
+    ssnTin: user?.personalInfo?.ssnTin ?? "",
+    dateOfBirth: user?.personalInfo?.dateOfBirth ? new Date(user.personalInfo.dateOfBirth) : undefined,
+    phone: user?.personalInfo?.phone ?? "",
+    email: user?.personalInfo?.email ?? "",
+    address: user?.address?.street ?? "",
+    city: user?.address?.city ?? "",
+    state: user?.address?.state ?? "",
+    zip: user?.address?.zip ?? "",
+    residencyState: user?.address?.residencyState ?? "",
+    isUSResident: user?.statusInfo?.isUSResident === true ? 'yes' : user?.statusInfo?.isUSResident === false ? 'no' : undefined,
+    status: user?.statusInfo?.status ?? undefined,
+    universityName: user?.statusInfo?.studentInfo?.universityName ?? "",
+    employmentType: user?.statusInfo?.professionalInfo?.employmentType ?? undefined,
+    companyName: user?.statusInfo?.professionalInfo?.companyName ?? "",
+    freelanceYears: user?.statusInfo?.professionalInfo?.freelanceYears != null ? String(user.statusInfo.professionalInfo.freelanceYears) : "",
+  } as z.infer<typeof formSchema>;
+}
+
+function mapFormToUserUpdates(values: z.infer<typeof formSchema>) {
+  return {
+    personalInfo: {
+      firstName: values.firstName,
+      middleName: values.middleName || undefined,
+      lastName: values.lastName,
+      suffix: values.suffix || undefined,
+      ssnTin: values.ssnTin,
+      dateOfBirth: values.dateOfBirth,
+      phone: values.phone,
+      email: values.email,
+    },
+    address: {
+      street: values.address || '',
+      city: values.city || '',
+      state: values.state || '',
+      zip: values.zip || '',
+      residencyState: values.residencyState || '',
+    },
+    statusInfo: {
+      isUSResident: values.isUSResident === 'yes' ? true : values.isUSResident === 'no' ? false : false,
+      status: (values.status ?? 'student') as 'student' | 'professional',
+      studentInfo: values.status === 'student' && values.universityName ? { universityName: values.universityName } : undefined,
+      professionalInfo:
+        values.status === 'professional'
+          ? {
+              employmentType: values.employmentType as 'employed' | 'freelancer' | undefined,
+              companyName: values.companyName || undefined,
+              freelanceYears: values.freelanceYears ? Number(values.freelanceYears) : undefined,
+            }
+          : undefined,
+    },
+  };
 }

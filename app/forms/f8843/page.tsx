@@ -2,6 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { useEffect } from "react";
+import { useApi } from "@/hooks/use-session";
 import * as z from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
@@ -115,6 +117,7 @@ const f8843FormSchema = z.object({
 type F8843FormValues = z.infer<typeof f8843FormSchema>;
 
 export default function F8843Form() {
+  const api = useApi();
   const form = useForm<F8843FormValues>({
     resolver: zodResolver(f8843FormSchema),
     defaultValues: {
@@ -196,6 +199,24 @@ export default function F8843Form() {
     console.log(values);
     // Handle form submission
   }
+
+  useEffect(() => {
+    let isActive = true;
+    (async () => {
+      try {
+        const res = await api('/api/users');
+        if (!res.ok) return;
+        const user = await res.json();
+        if (!isActive || !user) return;
+        const current = form.getValues();
+        const patch: Partial<F8843FormValues> = mapUserToF8843(user);
+        form.reset({ ...current, ...patch });
+      } catch {}
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [api, form]);
 
   return (
     <div className="container mx-auto p-8">
@@ -1000,4 +1021,37 @@ export default function F8843Form() {
       </Card>
     </div>
   );
+}
+
+type ApiUser = {
+  personalInfo?: {
+    firstName?: string;
+    lastName?: string;
+    ssnTin?: string;
+  };
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+  };
+};
+
+function mapUserToF8843(user: ApiUser): Partial<F8843FormValues> {
+  const firstName = user?.personalInfo?.firstName || "";
+  const lastName = user?.personalInfo?.lastName || "";
+  const taxId = user?.personalInfo?.ssnTin || "";
+  const parts = [
+    user?.address?.street,
+    [user?.address?.city, user?.address?.state].filter(Boolean).join(", "),
+    user?.address?.zip,
+  ].filter((p) => p && String(p).trim().length > 0);
+  const usAddress = parts.join("\n");
+
+  return {
+    firstName,
+    lastName,
+    taxId,
+    usAddress,
+  };
 }
