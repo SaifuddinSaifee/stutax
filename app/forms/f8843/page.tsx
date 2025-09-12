@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useApi } from "@/hooks/use-session";
 import * as z from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -227,31 +228,6 @@ export default function F8843Form() {
             Form 8843 - Statement for Exempt Individuals and Individuals With a
             Medical Condition
           </CardTitle>
-          <div className="mt-4 flex justify-center">
-            <button
-              type="button"
-              className="bg-secondary text-secondary-foreground hover:bg-secondary/90 h-9 px-3 rounded-md"
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/forms/f8843/download', { cache: 'no-store' });
-                  if (!res.ok) throw new Error('Failed to download');
-                  const blob = await res.blob();
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'f8843_2025_new.pdf';
-                  document.body.appendChild(a);
-                  a.click();
-                  a.remove();
-                  URL.revokeObjectURL(url);
-                } catch {
-                  alert('Failed to download empty PDF');
-                }
-              }}
-            >
-              Download Empty Form
-            </button>
-          </div>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -259,7 +235,7 @@ export default function F8843Form() {
               <div className="flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  className="text-sm underline"
+                  className="text-sm underline hidden"
                   onClick={async () => {
                     try {
                       const res = await fetch('/api/forms/f8843/fields', { cache: 'no-store' });
@@ -274,9 +250,8 @@ export default function F8843Form() {
                 >
                   List PDF fields
                 </button>
-                <button
+                <Button
                   type="button"
-                  className="text-sm underline"
                   onClick={async () => {
                     // Heuristic mapping: try to map our form values to PDF field names
                     try {
@@ -363,8 +338,31 @@ export default function F8843Form() {
                     }
                   }}
                 >
-                  Download filled PDF
-                </button>
+                  Download Filled PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/forms/f8843/download', { cache: 'no-store' });
+                      if (!res.ok) throw new Error('Failed to download');
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'f8843_2025_new.pdf';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch {
+                      alert('Failed to download empty PDF');
+                    }
+                  }}
+                >
+                  Download Empty Form
+                </Button>
               </div>
               {/* Header Information */}
               <div className="space-y-4">

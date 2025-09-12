@@ -195,7 +195,7 @@ export default function W2Form() {
   }
 
   return (
-    <div className="container mx-auto py-10">
+    <div className="container mx-auto p-8">
       <Card>
         <CardHeader>
           <CardTitle>W-2 Wage and Tax Statement</CardTitle>
