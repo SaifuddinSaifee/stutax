@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppSidebar } from "@/components/AppSidebar";
 import "./globals.css";
+import { SessionProvider } from '@/hooks/use-session';
+import { SessionGate } from '@/components/SessionGate';
+import { Toaster } from '@/components/ui/sonner';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,10 +31,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <div className="flex">
-          <AppSidebar />
-          <main className="flex-1">{children}</main>
-        </div>
+        <SessionProvider>
+          <SessionGate>
+            <div className="flex">
+              <AppSidebar />
+              <main className="flex-1">{children}</main>
+            </div>
+          </SessionGate>
+        </SessionProvider>
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   );

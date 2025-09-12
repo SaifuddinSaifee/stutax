@@ -1,25 +1,37 @@
-import { MongoClient, ServerApiVersion } from 'mongodb';
-import {config} from './config';
+import { MongoClient, Db, ServerApiVersion } from 'mongodb';
+import { config } from './config';
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-const client = new MongoClient(config.mongodb.MONGODB_URI, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  }
-});
+// Optional override, falls back to a sensible default
+const DEFAULT_DB_NAME = process.env.MONGODB_DB || 'stutax';
 
-async function run() {
-  try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } finally {
-    // Ensures that the client will close when you finish/error
-    await client.close();
+let cachedClient: MongoClient | null = null;
+let cachedDbName: string = DEFAULT_DB_NAME;
+
+export async function getMongoClient(): Promise<MongoClient> {
+  if (cachedClient) return cachedClient;
+
+  const client = new MongoClient(config.mongodb.MONGODB_URI, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    }
+  });
+
+  await client.connect();
+  cachedClient = client;
+  return client;
+}
+
+export async function getDb(dbName: string = cachedDbName): Promise<Db> {
+  const client = await getMongoClient();
+  cachedDbName = dbName;
+  return client.db(dbName);
+}
+
+export async function closeMongoClient(): Promise<void> {
+  if (cachedClient) {
+    await cachedClient.close();
+    cachedClient = null;
   }
 }
-run().catch(console.dir);
