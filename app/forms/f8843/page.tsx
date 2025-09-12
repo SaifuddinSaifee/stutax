@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useApi } from "@/hooks/use-session";
 import * as z from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,6 +118,7 @@ type F8843FormValues = z.infer<typeof f8843FormSchema>;
 
 export default function F8843Form() {
   const api = useApi();
+  const [pdfFields, setPdfFields] = useState<{ name: string; type: string }[] | null>(null);
   const form = useForm<F8843FormValues>({
     resolver: zodResolver(f8843FormSchema),
     defaultValues: {
@@ -230,6 +231,116 @@ export default function F8843Form() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  className="text-sm underline"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/forms/f8843/fields', { cache: 'no-store' });
+                      const data = await res.json();
+                      setPdfFields(data.fields || []);
+                      console.log('F8843 PDF fields:', data.fields);
+                      alert(`Found ${data.fields?.length ?? 0} PDF fields. Check console for details.`);
+                    } catch {
+                      alert('Failed to load PDF fields');
+                    }
+                  }}
+                >
+                  List PDF fields
+                </button>
+                <button
+                  type="button"
+                  className="text-sm underline"
+                  onClick={async () => {
+                    // Heuristic mapping: try to map our form values to PDF field names
+                    try {
+                      let fields = pdfFields;
+                      if (!fields) {
+                        const res = await fetch('/api/forms/f8843/fields', { cache: 'no-store' });
+                        const data = await res.json();
+                        fields = data.fields || [];
+                        setPdfFields(fields);
+                      }
+                      const values: Record<string, unknown> = {};
+                      const v = form.getValues();
+
+                      // Explicit mapping per requested order:
+                      // 4th: First name and initial
+                      values['topmostSubform[0].Page1[0].f1_4[0]'] = v.firstName ?? '';
+                      // 5th: Last name
+                      values['topmostSubform[0].Page1[0].f1_5[0]'] = v.lastName ?? '';
+                      // 6th: TIN (SSN/ITIN)
+                      values['topmostSubform[0].Page1[0].f1_6[0]'] = v.taxId ?? '';
+                      // 7th: Address in country of residence
+                      values['topmostSubform[0].Page1[0].f1_7[0]'] = v.foreignAddress ?? '';
+                      // 8th: Address in the United States
+                      values['topmostSubform[0].Page1[0].f1_8[0]'] = v.usAddress ?? '';
+
+                      // Field 9: 1a Visa type and entry date
+                      values['topmostSubform[0].Page1[0].f1_9[0]'] = `${v.visaInfo.type ?? ''}${v.visaInfo.entryDate ? ` - Entered: ${v.visaInfo.entryDate}` : ''}`.trim();
+                      // Field 10: 1b Current status (+change date and previous status if applicable)
+                      values['topmostSubform[0].Page1[0].f1_10[0]'] = `${v.nonimmigrantStatus.current ?? ''}${v.nonimmigrantStatus.changed && v.nonimmigrantStatus.changeDate ? ` - Changed on ${v.nonimmigrantStatus.changeDate}` : ''}${v.nonimmigrantStatus.changed && v.nonimmigrantStatus.previousStatus ? ` from ${v.nonimmigrantStatus.previousStatus}` : ''}`.trim();
+                      // Field 11: 2 Citizenship countries
+                      values['topmostSubform[0].Page1[0].f1_11[0]'] = v.citizenshipCountries ?? '';
+                      // Field 12: 3a Passport issuing countries
+                      values['topmostSubform[0].Page1[0].f1_12[0]'] = v.passport.issuingCountries ?? '';
+                      // Field 13: 3b Passport number(s)
+                      values['topmostSubform[0].Page1[0].f1_13[0]'] = v.passport.numbers ?? '';
+                      // Field 14-16: 4a Days present 2024/2023/2022
+                      values['topmostSubform[0].Page1[0].f1_14[0]'] = v.daysPresent.year2024 ?? '';
+                      values['topmostSubform[0].Page1[0].f1_15[0]'] = v.daysPresent.year2023 ?? '';
+                      values['topmostSubform[0].Page1[0].f1_16[0]'] = v.daysPresent.year2022 ?? '';
+                      // Field 17: 4b Excluded days 2024
+                      values['topmostSubform[0].Page1[0].f1_17[0]'] = v.daysPresent.excludedDays2024 ?? '';
+
+                      // Keep heuristic fill to try other fields automatically
+                      const lc = (s: string) => s.toLowerCase();
+                      for (const f of fields || []) {
+                        const n = lc(f.name);
+                        if (values[f.name] !== undefined) continue; // skip already mapped
+                        if (n.includes('first') && n.includes('name')) values[f.name] = v.firstName;
+                        else if ((n.includes('last') && n.includes('name')) || n === 'lastname') values[f.name] = v.lastName;
+                        else if (n.includes('ssn') || n.includes('itin') || n.includes('tax')) values[f.name] = v.taxId;
+                        else if (n.includes('foreign') && n.includes('address')) values[f.name] = v.foreignAddress;
+                        else if ((n.includes('us') && n.includes('address')) || n.includes('address united')) values[f.name] = v.usAddress;
+                        else if (n.includes('visa') && n.includes('type')) values[f.name] = v.visaInfo.type ?? '';
+                        else if ((n.includes('enter') || n.includes('entry')) && n.includes('date')) values[f.name] = v.visaInfo.entryDate;
+                        else if (n.includes('current') && n.includes('status')) values[f.name] = v.nonimmigrantStatus.current;
+                        else if (n.includes('change') && n.includes('date')) values[f.name] = v.nonimmigrantStatus.changeDate ?? '';
+                        else if (n.includes('previous') && n.includes('status')) values[f.name] = v.nonimmigrantStatus.previousStatus ?? '';
+                        else if (n.includes('citizen')) values[f.name] = v.citizenshipCountries;
+                        else if (n.includes('passport') && (n.includes('number') || n.endsWith('no') || n.endsWith('num'))) values[f.name] = v.passport.numbers;
+                        else if (n.includes('passport') && (n.includes('issuer') || n.includes('issuing'))) values[f.name] = v.passport.issuingCountries;
+                        else if (n.includes('2024') && n.includes('exclude')) values[f.name] = v.daysPresent.excludedDays2024;
+                        else if (n.includes('2024')) values[f.name] = v.daysPresent.year2024;
+                        else if (n.includes('2023')) values[f.name] = v.daysPresent.year2023;
+                        else if (n.includes('2022')) values[f.name] = v.daysPresent.year2022;
+                      }
+
+                      const res = await fetch('/api/forms/f8843/fill', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ values }),
+                      });
+                      if (!res.ok) throw new Error('Failed to generate PDF');
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'f8843_filled.pdf';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch {
+                      alert('Failed to download filled PDF');
+                    }
+                  }}
+                >
+                  Download filled PDF
+                </button>
+              </div>
               {/* Header Information */}
               <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Header Information</h2>
