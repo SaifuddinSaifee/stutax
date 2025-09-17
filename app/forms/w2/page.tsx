@@ -3,12 +3,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -25,9 +25,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-// Import our W2 interface
-import type { W2 } from "@/lib/interfaces/w2";
+// Import W2 interface
+// import type { W2 } from "@/lib/interfaces/w2";
 
 const w2FormSchema = z.object({
   tax_year: z.number().min(1900).max(new Date().getFullYear() + 1),
@@ -72,7 +73,7 @@ const w2FormSchema = z.object({
     box_6_medicare_tax_withheld: z.number().min(0),
     box_7_social_security_tips: z.number().min(0),
     box_8_allocated_tips: z.number().min(0),
-    box_10_dependant_care_benefits: z.number().min(0),
+    box_10_dependent_care_benefits: z.number().min(0),
     box_11_nonqualified_plans: z.number().min(0),
     
     box_13_checkboxes: z.object({
@@ -149,7 +150,7 @@ export default function W2Form() {
         box_6_medicare_tax_withheld: 0,
         box_7_social_security_tips: 0,
         box_8_allocated_tips: 0,
-        box_10_dependant_care_benefits: 0,
+        box_10_dependent_care_benefits: 0,
         box_11_nonqualified_plans: 0,
         box_13_checkboxes: {
           statutory_employee: false,
@@ -163,6 +164,44 @@ export default function W2Form() {
       }
     }
   });
+
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isAutofilled, setIsAutofilled] = useState(false);
+
+  async function handleUpload(file: File) {
+    setIsUploading(true);
+    setUploadSuccess(false);
+    setUploadError(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/forms/w2/upload", {
+        method: "POST",
+        body,
+      });
+      if (!res.ok) {
+        let message = "Upload failed";
+        try {
+          const err = await res.json();
+          if (err?.error) message = err.error as string;
+        } catch {}
+        throw new Error(message);
+      }
+      const data = await res.json();
+      form.reset({
+        ...form.getValues(),
+        ...data,
+      });
+      setUploadSuccess(true);
+      setIsAutofilled(true);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   // Field arrays for dynamic sections
   const { fields: box12Fields, append: appendBox12, remove: removeBox12 } = 
@@ -206,6 +245,45 @@ export default function W2Form() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {/* Upload Section */}
+              <div className="space-y-2">
+                <h3 className="text-lg font-medium">Upload W-2 Image</h3>
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUpload(f);
+                  }}
+                  disabled={isUploading}
+                  aria-busy={isUploading}
+                />
+                {isUploading && (
+                  <Alert>
+                    <AlertTitle>Analyzing your document…</AlertTitle>
+                    <AlertDescription>
+                      Extracting fields from the uploaded W-2. This may take a few seconds.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {uploadSuccess && (
+                  <Alert>
+                    <AlertTitle>Autofill complete</AlertTitle>
+                    <AlertDescription>
+                      We successfully extracted your W-2 and filled the form fields below.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {uploadError && (
+                  <Alert variant="destructive">
+                    <AlertTitle>Upload failed</AlertTitle>
+                    <AlertDescription>{uploadError}</AlertDescription>
+                  </Alert>
+                )}
+                {isAutofilled && !isUploading && !uploadError && (
+                  <p className="text-sm text-muted-foreground">Status: Filled from uploaded W-2</p>
+                )}
+              </div>
               {/* Identification Section */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">Identification Information</h3>
@@ -644,7 +722,7 @@ export default function W2Form() {
 
                   <FormField
                     control={form.control}
-                    name="federal_wages_and_taxes.box_10_dependant_care_benefits"
+                    name="federal_wages_and_taxes.box_10_dependent_care_benefits"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Dependent Care Benefits (Box 10)</FormLabel>
