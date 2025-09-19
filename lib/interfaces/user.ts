@@ -1,3 +1,5 @@
+import type { W2EmployerAddress, W2FederalWagesAndTaxes, W2StateAndLocal } from '@/lib/interfaces/w2';
+
 export interface PersonalInfo {
   firstName: string;
   middleName?: string;
@@ -35,11 +37,21 @@ export interface StatusInfo {
   professionalInfo?: ProfessionalInfo; // Optional: only present if status is professional
 }
 
+export interface UserW2Data {
+  tax_year: number;
+  box_b_employer_ein: string;
+  box_c_employer_name_address_zip: W2EmployerAddress;
+  box_d_control_number?: string | null;
+  federal_wages_and_taxes: W2FederalWagesAndTaxes;
+  state_and_local: W2StateAndLocal;
+}
+
 export interface User {
   _id: string;
   personalInfo: PersonalInfo;
   address: Address;
   statusInfo: StatusInfo;
+  w2?: UserW2Data[];
   createdAt: Date;
   updatedAt: Date;
 }

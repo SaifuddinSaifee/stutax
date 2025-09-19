@@ -27,6 +27,8 @@ import { PlusCircle, Trash2, Upload, CheckCircle2, AlertTriangle } from "lucide-
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useApi } from "@/hooks/use-session";
+import type { UserW2Data } from "@/lib/interfaces/user";
+import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 
 // Import W2 interface
@@ -116,6 +118,7 @@ const w2FormSchema = z.object({
 
 export default function W2Form() {
   const api = useApi();
+  const [userId, setUserId] = useState<string | null>(null);
   const form = useForm<z.infer<typeof w2FormSchema>>({
     resolver: zodResolver(w2FormSchema),
     defaultValues: {
@@ -284,8 +287,9 @@ export default function W2Form() {
       try {
         const res = await api('/api/users');
         if (!res.ok) return;
-        const user = (await res.json()) as ApiUser;
+        const user = (await res.json()) as ApiUser & { _id?: string };
         if (!isActive || !user) return;
+        if (user._id) setUserId(String(user._id));
         const mapped = mapUserToW2Defaults(user);
         form.reset({
           ...form.getValues(),
@@ -368,9 +372,58 @@ export default function W2Form() {
     'T','V','W','Y','Z','AA','BB','DD','EE','FF','GG','HH','II'
   ];
 
-  function onSubmit(values: z.infer<typeof w2FormSchema>) {
-    console.log(values);
-    // Handle form submission here
+  async function onSubmit(values: z.infer<typeof w2FormSchema>) {
+    const payload: UserW2Data = {
+      tax_year: values.tax_year,
+      box_b_employer_ein: values.box_b_employer_ein,
+      box_c_employer_name_address_zip: values.box_c_employer_name_address_zip,
+      box_d_control_number: values.box_d_control_number || null,
+      federal_wages_and_taxes: values.federal_wages_and_taxes,
+      state_and_local: values.state_and_local,
+    };
+    try {
+      const method = userId ? 'PUT' : 'POST';
+      const url = userId ? `/api/users?id=${encodeURIComponent(userId)}` : '/api/users';
+      const body = userId ? { w2: [payload] } : {
+        // For brand new user creation fallback, keep minimal to satisfy schema
+        personalInfo: {
+          firstName: values.box_e_employee_name.first,
+          middleName: values.box_e_employee_name.middle_initial || undefined,
+          lastName: values.box_e_employee_name.last,
+          suffix: values.box_e_employee_name.suffix || undefined,
+          ssnTin: values.box_a_employee_ssn,
+          dateOfBirth: new Date(),
+          phone: '',
+          email: '',
+        },
+        address: {
+          addressLine1: values.box_f_employee_address_zip.address_line1,
+          addressLine2: values.box_f_employee_address_zip.address_line2 || '',
+          city: values.box_f_employee_address_zip.city,
+          state: values.box_f_employee_address_zip.state,
+          zip: values.box_f_employee_address_zip.zip,
+          residencyState: '',
+        },
+        statusInfo: { isUSResident: false, status: 'student' },
+        w2: [payload],
+      };
+      const res = await api(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || 'Failed to save W-2');
+      }
+      toast.success('W-2 information saved successfully');
+      setIsAutofilled(false);
+      setUploadSuccess(false);
+    } catch (e) {
+      console.error(e);
+      const message = e instanceof Error ? e.message : 'Failed to save W-2';
+      toast.error(message);
+    }
   }
 
   return (
