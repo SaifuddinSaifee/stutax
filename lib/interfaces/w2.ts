@@ -57,7 +57,7 @@ export interface W2FederalWagesAndTaxes {
   box_7_social_security_tips: number;
   box_8_allocated_tips: number;
   box_9_reserved?: string | null;
-  box_10_dependant_care_benefits: number;
+  box_10_dependent_care_benefits: number;
   box_11_nonqualified_plans: number;
   box_12_items: W2Box12Item[];
   box_13_checkboxes: W2Box13Checkboxes;
