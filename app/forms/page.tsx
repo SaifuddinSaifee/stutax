@@ -54,6 +54,15 @@ export default function FormsPage() {
             </div>
           </CardHeader>
         </Card>
+
+        <Link href="/forms/f1040nr" className="block">
+          <Card className="transition-shadow hover:shadow-md">
+            <CardHeader>
+              <CardTitle>Form 1040-NR</CardTitle>
+              <CardDescription>U.S. Nonresident Alien Income Tax Return. File this if you are a nonresident with U.S. income effectively connected to a U.S. trade or business.</CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
     </div>
   )
