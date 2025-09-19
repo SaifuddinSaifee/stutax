@@ -253,6 +253,7 @@ export default function W2Form() {
       state?: string;
       zip?: string;
     };
+    w2?: UserW2Data[];
   };
 
   const toMiddleInitial = useCallback((value?: string): string => {
@@ -281,6 +282,17 @@ export default function W2Form() {
     } as Partial<z.infer<typeof w2FormSchema>>;
   }, [toMiddleInitial]);
 
+  const mapStoredW2ToFormDefaults = useCallback((w2: UserW2Data) => {
+    return {
+      tax_year: w2.tax_year,
+      box_b_employer_ein: w2.box_b_employer_ein,
+      box_c_employer_name_address_zip: w2.box_c_employer_name_address_zip,
+      box_d_control_number: w2.box_d_control_number ?? "",
+      federal_wages_and_taxes: w2.federal_wages_and_taxes,
+      state_and_local: w2.state_and_local,
+    } as Partial<z.infer<typeof w2FormSchema>>;
+  }, []);
+
   useEffect(() => {
     let isActive = true;
     (async () => {
@@ -291,8 +303,11 @@ export default function W2Form() {
         if (!isActive || !user) return;
         if (user._id) setUserId(String(user._id));
         const mapped = mapUserToW2Defaults(user);
+        const saved = Array.isArray(user.w2) && user.w2.length > 0 ? user.w2[user.w2.length - 1] : undefined;
+        const mappedW2 = saved ? mapStoredW2ToFormDefaults(saved) : {};
         form.reset({
           ...form.getValues(),
+          ...mappedW2,
           ...mapped,
         });
       } catch {}
@@ -300,7 +315,7 @@ export default function W2Form() {
     return () => {
       isActive = false;
     };
-  }, [api, form, mapUserToW2Defaults]);
+  }, [api, form, mapUserToW2Defaults, mapStoredW2ToFormDefaults]);
 
   async function handleUpload(file: File) {
     setIsUploading(true);
