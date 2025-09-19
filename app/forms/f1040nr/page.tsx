@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef } from "react";
 import { useFieldArray, useForm, type SubmitHandler } from "react-hook-form";
 import type { FieldPathByValue } from "react-hook-form";
 import type { F1040NR, F1040NRFilingStatus } from "@/lib/interfaces/f1040nr";
@@ -26,6 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useApi, useSession } from "@/hooks/use-session";
+import type { UserW2Data } from "@/lib/interfaces/user";
+import { toast } from "sonner";
 
 type F1040NRFormValues = F1040NR;
 
@@ -247,6 +251,9 @@ const amountYouOweFieldDefs: ReadonlyArray<{
 ] as const;
 
 export default function F1040NRForm() {
+  const api = useApi();
+  const { ready, email } = useSession();
+  const didAutofillRef = useRef(false);
   const initialValues: F1040NRFormValues = {
     tax_year: new Date().getFullYear(),
     header: {
@@ -293,6 +300,122 @@ export default function F1040NRForm() {
     defaultValues: initialValues,
   });
 
+  type ApiUser = {
+    personalInfo?: {
+      firstName?: string;
+      middleName?: string;
+      lastName?: string;
+      suffix?: string;
+      ssnTin?: string;
+      phone?: string;
+      email?: string;
+    };
+    address?: {
+      addressLine1?: string;
+      addressLine2?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+    w2?: UserW2Data[];
+  };
+
+  const toMiddleInitial = useCallback((value?: string): string => {
+    const v = (value || "").trim();
+    if (!v) return "";
+    const first = v.replace(/\./g, "").charAt(0);
+    return first ? first.toUpperCase() : "";
+  }, []);
+
+  const formatUSAddress = useCallback((addr?: ApiUser["address"]): string => {
+    if (!addr) return "";
+    const line1 = addr.addressLine1 || "";
+    const line2 = addr.addressLine2 ? `, ${addr.addressLine2}` : "";
+    const city = addr.city ? `, ${addr.city}` : "";
+    const stateZip = addr.state || addr.zip ? `, ${addr.state || ""} ${addr.zip || ""}` : "";
+    return `${line1}${line2}${city}${stateZip}`.trim();
+  }, []);
+
+  const sum = (values: Array<number | undefined | null>): number =>
+    values.reduce<number>((acc: number, v) => acc + (typeof v === "number" && !Number.isNaN(v) ? v : 0), 0);
+
+  const autofillFromProfileAndW2 = useCallback(async () => {
+    try {
+      const res = await api('/api/users');
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || 'Failed to load user');
+      }
+      const user = (await res.json()) as ApiUser;
+      let taxYear = form.getValues('tax_year');
+      const allW2s = Array.isArray(user.w2) ? user.w2 : [];
+      let w2s = allW2s.filter((w) => w.tax_year === taxYear);
+      if (w2s.length === 0 && allW2s.length > 0) {
+        // Fallback: use the latest available W-2 year and update form tax year
+        const latestYear = allW2s.map((w) => w.tax_year).reduce((a, b) => Math.max(a, b), 0);
+        w2s = allW2s.filter((w) => w.tax_year === latestYear);
+        taxYear = latestYear;
+        form.setValue('tax_year', latestYear);
+        toast.message(`No W-2 for ${form.getValues('tax_year')}. Using ${latestYear} instead.`);
+      }
+      if (w2s.length === 0) {
+        toast.info('No W-2 data found to autofill.');
+        return;
+      }
+
+      const wages1a = sum(w2s.map((w) => w.federal_wages_and_taxes.box_1_wages_tips_other_comp));
+      const tips1c = sum(w2s.map((w) => w.federal_wages_and_taxes.box_7_social_security_tips));
+      const depCare1e = sum(w2s.map((w) => w.federal_wages_and_taxes.box_10_dependent_care_benefits));
+      const otherEarned1h = sum(w2s.map((w) => w.federal_wages_and_taxes.box_8_allocated_tips));
+      const sched1Line8 = sum(w2s.map((w) => w.federal_wages_and_taxes.box_11_nonqualified_plans));
+      const withheld25a = sum(w2s.map((w) => w.federal_wages_and_taxes.box_2_federal_income_tax_withheld));
+
+      // Header
+      form.setValue('header.first_name_and_middle_initial', `${user.personalInfo?.firstName || ''} ${toMiddleInitial(user.personalInfo?.middleName)}`.trim());
+      form.setValue('header.last_name', user.personalInfo?.lastName || '');
+      form.setValue('header.identifying_number', user.personalInfo?.ssnTin || '');
+      form.setValue('header.us_address', formatUSAddress(user.address));
+
+      // Payments
+      form.setValue('payments.line_25a_federal_tax_withheld_w2', withheld25a || undefined);
+
+      // Income
+      form.setValue('income.line_1a_wages_w2', wages1a || undefined);
+      if (tips1c) form.setValue('income.line_1c_tip_income', tips1c);
+      if (depCare1e) form.setValue('income.line_1e_dependent_care_benefits', depCare1e);
+      if (otherEarned1h) form.setValue('income.line_1h_other_earned_income', otherEarned1h);
+      if (sched1Line8) form.setValue('income.line_8_other_income_schedule_1', sched1Line8);
+
+      // 1z total of 1a–1h (only summing what we filled plus any existing)
+      const oneB = form.getValues('income.line_1b_household_employee_wages') || 0;
+      const oneD = form.getValues('income.line_1d_medicaid_waiver_payments') || 0;
+      const oneF = form.getValues('income.line_1f_adoption_benefits') || 0;
+      const oneG = form.getValues('income.line_1g_wages_from_form_8919') || 0;
+      const oneA = wages1a || 0;
+      const oneC = tips1c || 0;
+      const oneE = depCare1e || 0;
+      const oneH = otherEarned1h || 0;
+      const oneZ = oneA + oneB + oneC + oneD + oneE + oneF + oneG + oneH;
+      if (oneZ) form.setValue('income.line_1z_total_wages', Math.round(oneZ * 100) / 100);
+
+      // Convenience: fill sign_here contact fields
+      if (user.personalInfo?.phone) form.setValue('sign_here.phone_number', user.personalInfo.phone);
+      if (user.personalInfo?.email) form.setValue('sign_here.email_address', user.personalInfo.email);
+
+      toast.success('Autofilled from Profile & W‑2');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Autofill failed';
+      toast.error(message);
+    }
+  }, [api, form, formatUSAddress, toMiddleInitial]);
+
+  useEffect(() => {
+    if (!ready || !email) return;
+    if (didAutofillRef.current) return;
+    didAutofillRef.current = true;
+    void autofillFromProfileAndW2();
+  }, [ready, email, autofillFromProfileAndW2]);
+
   const {
     fields: dependentFields,
     append: appendDependent,
@@ -337,9 +460,14 @@ export default function F1040NRForm() {
     <div className="container mx-auto p-8">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
-            Form 1040-NR — U.S. Nonresident Alien Income Tax Return
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-2xl font-bold text-center">
+              Form 1040-NR — U.S. Nonresident Alien Income Tax Return
+            </CardTitle>
+            <Button type="button" variant="secondary" onClick={autofillFromProfileAndW2}>
+              Autofill from Profile & W‑2
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <Form {...form}>
