@@ -37,7 +37,8 @@ export async function addUser(userData: NewUserInput): Promise<User> {
           email: (userData as MinimalRegistrationData).email,
         },
         address: {
-          street: '',
+          addressLine1: '',
+          addressLine2: '',
           city: '',
           state: '',
           zip: '',

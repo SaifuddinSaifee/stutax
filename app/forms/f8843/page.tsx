@@ -1164,7 +1164,8 @@ type ApiUser = {
     ssnTin?: string;
   };
   address?: {
-    street?: string;
+    addressLine1?: string;
+    addressLine2?: string;
     city?: string;
     state?: string;
     zip?: string;
@@ -1176,7 +1177,7 @@ function mapUserToF8843(user: ApiUser): Partial<F8843FormValues> {
   const lastName = user?.personalInfo?.lastName || "";
   const taxId = user?.personalInfo?.ssnTin || "";
   const parts = [
-    user?.address?.street,
+    [user?.address?.addressLine1, user?.address?.addressLine2].filter(Boolean).join(", "),
     [user?.address?.city, user?.address?.state].filter(Boolean).join(", "),
     user?.address?.zip,
   ].filter((p) => p && String(p).trim().length > 0);

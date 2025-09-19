@@ -1,0 +1,105 @@
+{
+  "tax_year": 2013,
+  "identification_and_address": {
+    "box_a_employee_ssn": "789-24-5851",
+    "box_b_employer_ein": "23-938857",
+    "box_c_employer_name_address_zip": {
+      "name": "SEAGATE INC.",
+      "address_line1": "4100 Lake Otis Parkway #104",
+      "address_line2": null,
+      "city": "Anchorage",
+      "state": "AK",
+      "zip": "99508"
+    },
+    "box_d_control_number": "48658974",
+    "box_e_employee_name": {
+      "first": "Jade",
+      "middle_initial": null,
+      "last": "Power",
+      "suffix": null
+    },
+    "box_f_employee_address_zip": {
+      "address_line1": "1900 Silver Cross Boulevard",
+      "address_line2": null,
+      "city": "New Lenox",
+      "state": "IL",
+      "zip": "60451"
+    }
+  },
+  "federal_wages_and_taxes": {
+    "box_1_wages_tips_other_comp": 9400.98,
+    "box_2_federal_income_tax_withheld": 9007.87,
+    "box_3_social_security_wages": 120.98,
+    "box_4_social_security_tax_withheld": 54.54,
+    "box_5_medicare_wages_and_tips": 123.9,
+    "box_6_medicare_tax_withheld": 3.87,
+    "box_7_social_security_tips": 98.54,
+    "box_8_allocated_tips": 12.9,
+    "box_9_reserved": null,
+    "box_10_dependent_care_benefits": 78.54,
+    "box_11_nonqualified_plans": 12.09,
+    "box_12_items": [
+      {
+        "code": "E",
+        "amount": 120
+      },
+      {
+        "code": "D",
+        "amount": 78.65
+      },
+      {
+        "code": "DD",
+        "amount": 67.98
+      },
+      {
+        "code": null,
+        "amount": null
+      }
+    ],
+    "box_13_checkboxes": {
+      "statutory_employee": false,
+      "retirement_plan": true,
+      "third_party_sick_pay": false
+    },
+    "box_14_other": [
+      {
+        "label": "CASDI",
+        "amount": 12.67
+      }
+    ]
+  },
+  "state_and_local": {
+    "entries": [
+      {
+        "box_15_state": "IL",
+        "box_15_employer_state_id": "651219504",
+        "box_16_state_wages": 135,
+        "box_17_state_income_tax": 134.52,
+        "locals": [
+          {
+            "box_20_locality_name": "CUSD",
+            "box_18_local_wages": 678.23,
+            "box_19_local_income_tax": 234.9
+          }
+        ]
+      },
+      {
+        "box_15_state": "AZ",
+        "box_15_employer_state_id": "07046263G",
+        "box_16_state_wages": 6259.43,
+        "box_17_state_income_tax": 2253.32,
+        "locals": [
+          {
+            "box_20_locality_name": "A- 1",
+            "box_18_local_wages": 6678.33,
+            "box_19_local_income_tax": 354.97
+          }
+        ]
+      }
+    ]
+  },
+  "copies_metadata": {
+    "copy": "B",
+    "void_indicator": null
+  }
+}
