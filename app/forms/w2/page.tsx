@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
 import * as z from "zod";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +23,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2 } from "lucide-react";
+import { PlusCircle, Trash2, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useApi } from "@/hooks/use-session";
+import type { UserW2Data } from "@/lib/interfaces/user";
+import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
 
 // Import W2 interface
 // import type { W2 } from "@/lib/interfaces/w2";
@@ -113,6 +117,8 @@ const w2FormSchema = z.object({
 });
 
 export default function W2Form() {
+  const api = useApi();
+  const [userId, setUserId] = useState<string | null>(null);
   const form = useForm<z.infer<typeof w2FormSchema>>({
     resolver: zodResolver(w2FormSchema),
     defaultValues: {
@@ -169,6 +175,147 @@ export default function W2Form() {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isAutofilled, setIsAutofilled] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+  const ACCEPTED_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+    "image/jpg",
+  ];
+
+  function validateFile(file: File): string | null {
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      return "Unsupported file type. Upload JPG, PNG, WEBP, or PDF.";
+    }
+    if (file.size > MAX_SIZE_BYTES) {
+      return "File is too large. Max size is 10 MB.";
+    }
+    return null;
+  }
+
+  function onFilesSelected(files: FileList | null) {
+    const file = files?.[0];
+    if (!file) return;
+    const err = validateFile(file);
+    if (err) {
+      setUploadError(err);
+      setUploadSuccess(false);
+      return;
+    }
+    setUploadError(null);
+    setSelectedFileName(file.name);
+    handleUpload(file);
+  }
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    if (isUploading) {
+      setUploadProgress(10);
+      interval = setInterval(() => {
+        setUploadProgress((current) => {
+          if (current >= 90) return current;
+          const increment = Math.random() * 8 + 2; // +2% to +10%
+          return Math.min(90, current + increment);
+        });
+      }, 400);
+    } else {
+      if (uploadSuccess) {
+        setUploadProgress(100);
+        const t = setTimeout(() => setUploadProgress(0), 800);
+        return () => clearTimeout(t);
+      } else {
+        setUploadProgress(0);
+      }
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isUploading, uploadSuccess]);
+
+  type ApiUser = {
+    personalInfo?: {
+      firstName?: string;
+      middleName?: string;
+      lastName?: string;
+      suffix?: string;
+      ssnTin?: string;
+    };
+    address?: {
+      addressLine1?: string;
+      addressLine2?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+    };
+    w2?: UserW2Data[];
+  };
+
+  const toMiddleInitial = useCallback((value?: string): string => {
+    const v = (value || "").trim();
+    if (!v) return "";
+    const first = v.replace(/\./g, "").charAt(0);
+    return first ? first.toUpperCase() : "";
+  }, []);
+
+  const mapUserToW2Defaults = useCallback((user: ApiUser) => {
+    return {
+      box_a_employee_ssn: user?.personalInfo?.ssnTin ?? "",
+      box_e_employee_name: {
+        first: user?.personalInfo?.firstName ?? "",
+        middle_initial: toMiddleInitial(user?.personalInfo?.middleName),
+        last: user?.personalInfo?.lastName ?? "",
+        suffix: user?.personalInfo?.suffix ?? "",
+      },
+      box_f_employee_address_zip: {
+        address_line1: user?.address?.addressLine1 ?? "",
+        address_line2: user?.address?.addressLine2 ?? "",
+        city: user?.address?.city ?? "",
+        state: user?.address?.state ?? "",
+        zip: user?.address?.zip ?? "",
+      },
+    } as Partial<z.infer<typeof w2FormSchema>>;
+  }, [toMiddleInitial]);
+
+  const mapStoredW2ToFormDefaults = useCallback((w2: UserW2Data) => {
+    return {
+      tax_year: w2.tax_year,
+      box_b_employer_ein: w2.box_b_employer_ein,
+      box_c_employer_name_address_zip: w2.box_c_employer_name_address_zip,
+      box_d_control_number: w2.box_d_control_number ?? "",
+      federal_wages_and_taxes: w2.federal_wages_and_taxes,
+      state_and_local: w2.state_and_local,
+    } as Partial<z.infer<typeof w2FormSchema>>;
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+    (async () => {
+      try {
+        const res = await api('/api/users');
+        if (!res.ok) return;
+        const user = (await res.json()) as ApiUser & { _id?: string };
+        if (!isActive || !user) return;
+        if (user._id) setUserId(String(user._id));
+        const mapped = mapUserToW2Defaults(user);
+        const saved = Array.isArray(user.w2) && user.w2.length > 0 ? user.w2[user.w2.length - 1] : undefined;
+        const mappedW2 = saved ? mapStoredW2ToFormDefaults(saved) : {};
+        form.reset({
+          ...form.getValues(),
+          ...mappedW2,
+          ...mapped,
+        });
+      } catch {}
+    })();
+    return () => {
+      isActive = false;
+    };
+  }, [api, form, mapUserToW2Defaults, mapStoredW2ToFormDefaults]);
 
   async function handleUpload(file: File) {
     setIsUploading(true);
@@ -190,9 +337,21 @@ export default function W2Form() {
         throw new Error(message);
       }
       const data = await res.json();
+      const merged = {
+        ...data,
+        box_a_employee_ssn: form.getValues("box_a_employee_ssn"),
+        box_e_employee_name: {
+          ...(data?.box_e_employee_name ?? {}),
+          ...form.getValues("box_e_employee_name"),
+        },
+        box_f_employee_address_zip: {
+          ...(data?.box_f_employee_address_zip ?? {}),
+          ...form.getValues("box_f_employee_address_zip"),
+        },
+      } as z.infer<typeof w2FormSchema>;
       form.reset({
         ...form.getValues(),
-        ...data,
+        ...merged,
       });
       setUploadSuccess(true);
       setIsAutofilled(true);
@@ -228,9 +387,58 @@ export default function W2Form() {
     'T','V','W','Y','Z','AA','BB','DD','EE','FF','GG','HH','II'
   ];
 
-  function onSubmit(values: z.infer<typeof w2FormSchema>) {
-    console.log(values);
-    // Handle form submission here
+  async function onSubmit(values: z.infer<typeof w2FormSchema>) {
+    const payload: UserW2Data = {
+      tax_year: values.tax_year,
+      box_b_employer_ein: values.box_b_employer_ein,
+      box_c_employer_name_address_zip: values.box_c_employer_name_address_zip,
+      box_d_control_number: values.box_d_control_number || null,
+      federal_wages_and_taxes: values.federal_wages_and_taxes,
+      state_and_local: values.state_and_local,
+    };
+    try {
+      const method = userId ? 'PUT' : 'POST';
+      const url = userId ? `/api/users?id=${encodeURIComponent(userId)}` : '/api/users';
+      const body = userId ? { w2: [payload] } : {
+        // For brand new user creation fallback, keep minimal to satisfy schema
+        personalInfo: {
+          firstName: values.box_e_employee_name.first,
+          middleName: values.box_e_employee_name.middle_initial || undefined,
+          lastName: values.box_e_employee_name.last,
+          suffix: values.box_e_employee_name.suffix || undefined,
+          ssnTin: values.box_a_employee_ssn,
+          dateOfBirth: new Date(),
+          phone: '',
+          email: '',
+        },
+        address: {
+          addressLine1: values.box_f_employee_address_zip.address_line1,
+          addressLine2: values.box_f_employee_address_zip.address_line2 || '',
+          city: values.box_f_employee_address_zip.city,
+          state: values.box_f_employee_address_zip.state,
+          zip: values.box_f_employee_address_zip.zip,
+          residencyState: '',
+        },
+        statusInfo: { isUSResident: false, status: 'student' },
+        w2: [payload],
+      };
+      const res = await api(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || 'Failed to save W-2');
+      }
+      toast.success('W-2 information saved successfully');
+      setIsAutofilled(false);
+      setUploadSuccess(false);
+    } catch (e) {
+      console.error(e);
+      const message = e instanceof Error ? e.message : 'Failed to save W-2';
+      toast.error(message);
+    }
   }
 
   return (
@@ -246,37 +454,91 @@ export default function W2Form() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               {/* Upload Section */}
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">Upload W-2 Image</h3>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleUpload(f);
-                  }}
-                  disabled={isUploading}
+              <div className="space-y-3">
+                <h3 className="text-lg font-medium">Upload your W-2</h3>
+                <div
+                  className={
+                    `group relative rounded-lg border-2 border-dashed p-6 transition-colors ` +
+                    `${dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:bg-muted/50"} ` +
+                    `${isUploading ? "opacity-80" : ""}`
+                  }
+                  role="button"
+                  tabIndex={0}
                   aria-busy={isUploading}
-                />
+                  aria-label="Upload W-2 by dragging and dropping or browsing"
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!isUploading) setDragActive(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragActive(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragActive(false);
+                    if (!isUploading) onFilesSelected(e.dataTransfer.files);
+                  }}
+                  onKeyDown={(e) => {
+                    if ((e.key === "Enter" || e.key === " ") && !isUploading) {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                >
+                  <div className="flex flex-col items-center justify-center gap-2 text-center">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm font-medium">Drag & drop your W‑2 image or PDF</p>
+                    <p className="text-xs text-muted-foreground">JPG, PNG, WEBP, or PDF • Max 10 MB</p>
+                    <div className="pt-1">
+                      <Button type="button" variant="secondary" size="sm" disabled={isUploading}>
+                        Browse files
+                      </Button>
+                    </div>
+                    {selectedFileName && (
+                      <p className="text-xs text-muted-foreground">Selected: {selectedFileName}</p>
+                    )}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => onFilesSelected(e.target.files)}
+                    disabled={isUploading}
+                  />
+                </div>
+
                 {isUploading && (
-                  <Alert>
-                    <AlertTitle>Analyzing your document…</AlertTitle>
-                    <AlertDescription>
-                      Extracting fields from the uploaded W-2. This may take a few seconds.
-                    </AlertDescription>
-                  </Alert>
+                  <div className="space-y-2">
+                    <Alert>
+                      <AlertTitle>Analyzing your document…</AlertTitle>
+                      <AlertDescription>
+                        Extracting W-2 fields. This usually takes a few seconds.
+                      </AlertDescription>
+                    </Alert>
+                    <Progress value={uploadProgress} />
+                  </div>
                 )}
                 {uploadSuccess && (
                   <Alert>
-                    <AlertTitle>Autofill complete</AlertTitle>
+                    <AlertTitle className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" /> Autofill complete
+                    </AlertTitle>
                     <AlertDescription>
-                      We successfully extracted your W-2 and filled the form fields below.
+                      We extracted your W-2 and filled the form below. Please review for accuracy.
                     </AlertDescription>
                   </Alert>
                 )}
                 {uploadError && (
                   <Alert variant="destructive">
-                    <AlertTitle>Upload failed</AlertTitle>
+                    <AlertTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" /> Upload failed
+                    </AlertTitle>
                     <AlertDescription>{uploadError}</AlertDescription>
                   </Alert>
                 )}
@@ -312,7 +574,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>Employee&apos;s SSN (Box a)</FormLabel>
                         <FormControl>
-                          <Input placeholder="XXX-XX-XXXX" {...field} />
+                          <Input placeholder="XXX-XX-XXXX" {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -444,7 +706,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>First Name</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -457,7 +719,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>Middle Initial</FormLabel>
                         <FormControl>
-                          <Input maxLength={1} {...field} />
+                          <Input maxLength={1} {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -470,7 +732,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>Last Name</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -483,7 +745,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>Suffix</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -501,7 +763,7 @@ export default function W2Form() {
                       <FormItem className="col-span-2">
                         <FormLabel>Address Line 1</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -514,7 +776,7 @@ export default function W2Form() {
                       <FormItem className="col-span-2">
                         <FormLabel>Address Line 2</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -527,7 +789,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>City</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -544,6 +806,8 @@ export default function W2Form() {
                             maxLength={2}
                             {...field}
                             onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                            readOnly
+                            aria-readonly="true"
                           />
                         </FormControl>
                         <FormMessage />
@@ -557,7 +821,7 @@ export default function W2Form() {
                       <FormItem>
                         <FormLabel>ZIP Code</FormLabel>
                         <FormControl>
-                          <Input {...field} />
+                          <Input {...field} readOnly aria-readonly="true" />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
