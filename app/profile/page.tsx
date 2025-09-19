@@ -66,7 +66,8 @@ const formSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
 
   // Address Information (not mandatory)
-  address: z.union([z.string().min(5, "Please enter a valid street address"), z.literal("")]),
+  addressLine1: z.union([z.string().min(5, "Please enter a valid street address"), z.literal("")]),
+  addressLine2: z.union([z.string(), z.literal("")]).optional(),
   city: z.union([z.string().min(2, "Please enter a valid city"), z.literal("")]),
   state: z.union([z.string().length(2, "Please enter a valid 2-letter state code").toUpperCase(), z.literal("")]),
   zip: z.union([z.string().regex(/^\d{5}(-\d{4})?$/, "Please enter a valid ZIP code"), z.literal("")]),
@@ -94,7 +95,8 @@ export default function ProfilePage() {
       ssnTin: "",
       phone: "",
       email: "",
-      address: "",
+      addressLine1: "",
+      addressLine2: "",
       city: "",
       state: "",
       zip: "",
@@ -158,7 +160,8 @@ export default function ProfilePage() {
       dateOfBirth: 'Date of Birth',
       phone: 'Phone',
       email: 'Email',
-      address: 'Street Address',
+      addressLine1: 'Street Address',
+      addressLine2: 'Address Line 2',
       city: 'City',
       state: 'State',
       zip: 'ZIP',
@@ -337,12 +340,25 @@ export default function ProfilePage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="address"
+                    name="addressLine1"
                     render={({ field }) => (
                       <FormItem className="col-span-2">
-                        <FormLabel>Street Address</FormLabel>
+                        <FormLabel>Address Line 1</FormLabel>
                         <FormControl>
                           <Input placeholder="123 Main St" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="addressLine2"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Address Line 2 (optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Apt, suite, unit, building, floor, etc." {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -579,9 +595,7 @@ export default function ProfilePage() {
 
 type ApiUser = {
   personalInfo?: {
-    // Back-compat optional single name
     name?: string;
-    // New structured name fields
     firstName?: string;
     middleName?: string;
     lastName?: string;
@@ -592,7 +606,8 @@ type ApiUser = {
     email?: string;
   };
   address?: {
-    street?: string;
+    addressLine1?: string;
+    addressLine2?: string;
     city?: string;
     state?: string;
     zip?: string;
@@ -620,7 +635,8 @@ function mapUserToFormDefaults(user: ApiUser) {
     dateOfBirth: user?.personalInfo?.dateOfBirth ? new Date(user.personalInfo.dateOfBirth) : undefined,
     phone: user?.personalInfo?.phone ?? "",
     email: user?.personalInfo?.email ?? "",
-    address: user?.address?.street ?? "",
+    addressLine1: user?.address?.addressLine1 ?? "",
+    addressLine2: user?.address?.addressLine2 ?? "",
     city: user?.address?.city ?? "",
     state: user?.address?.state ?? "",
     zip: user?.address?.zip ?? "",
@@ -647,7 +663,8 @@ function mapFormToUserUpdates(values: z.infer<typeof formSchema>) {
       email: values.email,
     },
     address: {
-      street: values.address || '',
+      addressLine1: values.addressLine1 || '',
+      addressLine2: values.addressLine2 || '',
       city: values.city || '',
       state: values.state || '',
       zip: values.zip || '',
