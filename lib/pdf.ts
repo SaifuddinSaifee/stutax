@@ -5,6 +5,7 @@ import path from 'path';
 export type PdfFieldDescriptor = {
   name: string;
   type: 'text' | 'checkbox' | 'radio' | 'dropdown' | 'optionlist' | 'unknown';
+  value?: string | boolean | string[] | undefined;
 };
 
 export async function loadPdfFromDisk(relativePathFromRoot: string) {
@@ -20,12 +21,28 @@ export async function listAcroFormFields(pdf: PDFDocument): Promise<PdfFieldDesc
   return fields.map((f) => {
     const type = f.constructor.name;
     let kind: PdfFieldDescriptor['type'] = 'unknown';
-    if (type === PDFTextField.name) kind = 'text';
-    else if (type === PDFCheckBox.name) kind = 'checkbox';
-    else if (type === PDFRadioGroup.name) kind = 'radio';
-    else if (type === PDFDropdown.name) kind = 'dropdown';
-    else if (type === PDFOptionList.name) kind = 'optionlist';
-    return { name: f.getName(), type: kind };
+    let value: PdfFieldDescriptor['value'];
+    if (type === PDFTextField.name) {
+      kind = 'text';
+      value = (f as PDFTextField).getText();
+    } else if (type === PDFCheckBox.name) {
+      kind = 'checkbox';
+      value = (f as PDFCheckBox).isChecked();
+    } else if (type === PDFRadioGroup.name) {
+      kind = 'radio';
+      value = (f as PDFRadioGroup).getSelected();
+    } else if (type === PDFDropdown.name) {
+      kind = 'dropdown';
+      value = (f as PDFDropdown).getSelected();
+      // dropdown getSelected returns string[]; convert to string for common case of single select
+      if (Array.isArray(value)) {
+        value = value.length <= 1 ? value[0] : value;
+      }
+    } else if (type === PDFOptionList.name) {
+      kind = 'optionlist';
+      value = (f as PDFOptionList).getSelected();
+    }
+    return { name: f.getName(), type: kind, value };
   });
 }
 
