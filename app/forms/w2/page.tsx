@@ -23,7 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { PlusCircle, Trash2, Upload, CheckCircle2, AlertTriangle } from "lucide-react";
+import { PlusCircle, Trash2, Upload, CheckCircle2, AlertTriangle, Download } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useApi } from "@/hooks/use-session";
@@ -545,6 +545,14 @@ export default function W2Form() {
                 {isAutofilled && !isUploading && !uploadError && (
                   <p className="text-sm text-muted-foreground">Status: Filled from uploaded W-2</p>
                 )}
+              </div>
+              <div>
+                <Button asChild variant="outline" size="sm">
+                  <a href="/api/forms/w2/sample" aria-label="Download sample W-2">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download sample W‑2
+                  </a>
+                </Button>
               </div>
               {/* Identification Section */}
               <div className="space-y-4">
